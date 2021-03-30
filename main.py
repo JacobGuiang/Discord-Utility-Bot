@@ -2,16 +2,23 @@ import discord
 from discord.ext import commands
 from PyDictionary import PyDictionary
 from random import getrandbits
+import requests
+import json
+from pprint import pprint
 
 client = commands.Bot(command_prefix = '$')
 client.remove_command('help')
 
-COMMAND_LIST = ['coinflip', 'define']
+COMMAND_LIST = ['coinflip', 'define', 'weather']
 MAX_FLIPS = 1000000
 DESCRIPTIONS = {
     'coinflip': f'Flip a coin a number of times.\n\n**Format:** $coinflip <number>\n\n*<number> must be greater than 0 and less than {MAX_FLIPS}.*\n\n**Example:** $coinflip 999',
-    'define': 'Define a word.\n\n**Format:** $define <word>\n\n**Example:** $define glacier'
+    'define': 'Define a word.\n\n**Format:** $define <word>\n\n**Example:** $define glacier',
+	'weather': 'Display current weather for a city.\n\n**Format:** $weather <city>\n\n**Example:** $weather austin'
 }
+
+weather_key = 'weather_key'
+discord_key = 'discord_key'
 
 @client.event
 async def on_ready():
@@ -90,4 +97,23 @@ async def define(ctx, *args):
 				response += f'{synonyms[-1]}'
 	await ctx.send(response)
 
-client.run('token')
+@client.command()
+async def weather(ctx, *args):
+	response = ''
+	city = '%20'.join(args)
+	url = f'https://api.openweathermap.org/data/2.5/weather?q={city}&appid={weather_key}&units=imperial'
+	data = json.loads(requests.get(url).content)
+	if data['cod'] == 200:
+		response = f'__Weather in {data["name"]}__\n\n'
+		temp_data = data["main"]
+		response += f'{data["weather"][0]["description"].title()}\n'
+		response += f'**Feels like:** {temp_data["feels_like"]} °F\n'
+		response += f'**Temperature:** {temp_data["temp"]} °F\n'
+		response += f'**High:** {temp_data["temp_max"]} °F\n'
+		response += f'**Low:** {temp_data["temp_min"]} °F\n'
+	else:
+		response = f'{data["message"]}\n'
+		response += f'Type "$help weather"'
+	await ctx.send(response)
+
+client.run(discord_key)
