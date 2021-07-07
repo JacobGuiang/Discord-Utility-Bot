@@ -1,49 +1,73 @@
 import discord
-from discord.ext import commands
+from discord_slash import SlashCommand
+from discord_slash.utils.manage_commands import create_option, create_choice
 from PyDictionary import PyDictionary
 from random import getrandbits
 import requests
 import json
 from pprint import pprint
 
-client = commands.Bot(command_prefix = '$')
-client.remove_command('help')
+client = discord.Client()
+slash = SlashCommand(client, sync_commands=True)
 
-COMMAND_LIST = ['coinflip', 'define', 'weather']
-MAX_FLIPS = 1000000
+DISCORD_KEY = 'discord_key'
+WEATHER_KEY = 'weather_key'
+
 DESCRIPTIONS = {
-    'coinflip': f'Flip a coin a number of times.\n\n**Format:** $coinflip <number>\n\n*<number> must be greater than 0 and less than {MAX_FLIPS}.*\n\n**Example:** $coinflip 999',
-    'define': 'Define a word.\n\n**Format:** $define <word>\n\n**Example:** $define glacier',
-	'weather': 'Display current weather for a city.\n\n**Format:** $weather <city>\n\n**Example:** $weather austin'
+		'coinflip': 'Flip a coin a number of times.\n\n**Format:** /coinflip <number>\n\n*<number> must be greater than 0 and less than or equal to 1000000.*\n\n**Example:** /coinflip 999',
+		'define': 'Define a word.\n\n**Format:** /define <word>\n\n**Example:** /define glacier',
+		'weather': 'Display current weather for a city.\n\n**Format:** /weather <city>\n\n**Example:** /weather austin'
 }
-
-weather_key = 'weather_key'
-discord_key = 'discord_key'
 
 @client.event
 async def on_ready():
 	print('We have logged in as {0.user}'.format(client))
-	status = discord.Game('$help')
+	status = discord.Game('/help')
 	await client.change_presence(activity=status)
 
-@client.command()
-async def help(ctx, *args):
-	response = ''
-	if args and len(args) == 1 and args[0] in DESCRIPTIONS.keys():
-		response = DESCRIPTIONS[args[0]]
-	else:
-		response = 'Type "$help <command>" to learn about a command.\n**Example:** $help coinflip\n\nAvailable commands:'
-		for c in COMMAND_LIST:
-			response += f'\n\t{c}'
-	await ctx.send(response)
+@slash.slash(name='help',
+						 description='Get information on available commands.',
+						 options=[
+							 create_option(
+								 name='command',
+								 description='Which command would you like to learn about?',
+								 option_type=3,
+								 required=True,
+								 choices=[
+									create_choice(
+										name='coinflip',
+										value='coinflip'
+									),
+									create_choice(
+										name='define',
+										value='define'
+									),
+									create_choice(
+										name='weather',
+										value='weather'
+									)
+								]
+							 )
+						 ])
+async def help(ctx, command):
+	await ctx.send(DESCRIPTIONS[command])
 
-@client.command()
-async def coinflip(ctx, *args):
+@slash.slash(name='coinflip',
+						 description='Flip a coin a number of times.',
+						 options=[
+							 create_option(
+								name='number',
+								description='Enter the number of times you want to flip a coin.',
+								option_type=4,
+								required=True
+							 )
+						 ])
+async def coinflip(ctx, number):
 	response = ''
-	if not args or len(args) != 1 or not args[0].isdigit() or int(args[0] > MAX_FLIPS or int(args[0]) < 1):
-		response = DESCRIPTIONS['coinflip']
+	if number < 0 or number > 1000000:
+		response = 'Number must be greater than 0 or less than or equal to 1000000'
 	else:
-		if args[0] == '1':
+		if number == 1:
 			if getrandbits(1):
 				result = 'heads'
 			else:
@@ -52,56 +76,70 @@ async def coinflip(ctx, *args):
 		else:
 			heads_count = 0
 			tails_count = 0
-			for i in range(int(args[0])):
+			for i in range(number):
 				if getrandbits(1):
 					heads_count += 1
 				else:
 					tails_count += 1
-			total = heads_count + tails_count
-			response = f'Flipping a coin {total} times.\nLanded on heads {heads_count} times.\nLanded on tails {tails_count} times.'
+			response = f'Flipping a coin {number} times.\nLanded on heads {heads_count} times.\nLanded on tails {tails_count} times.'
 	await ctx.send(response)
 
-@client.command()
-async def define(ctx, *args):
+@slash.slash(name='define',
+						 description='Define a word.',
+						 options=[
+							 create_option(
+								name='word',
+								description='Enter the word you want the definition of.',
+								option_type=3,
+								required=True
+							 )
+						 ])
+async def define(ctx, word):
 	response = ''
-	if not args or len(args) > 1:
-		response = DESCRIPTIONS['define']
+	dictionary = PyDictionary(word)
+	definitions = dictionary.meaning(word)
+	if definitions is None:
+		response = f'"{word}" is not a word.'
 	else:
-		word = args[0]
-		dictionary = PyDictionary(word)
-		definitions = dictionary.meaning(word)
-		if definitions is None:
-			response = f'"{word}" is not a word.'
-		else:
-			response = f'Defining "{word}"\n\n'
-			for word_type, defs in definitions.items():
-				if len(defs) > 0:
-					response += f'*{word_type}*\n'
-					count = 1
-					num_defs = len(defs)
-					for d in defs:
-						response += '\t'
-						if num_defs > 1:
-							response += f'{count}. '
-							count += 1
-						response += f'{d}'
-						if '(' in d:
-							response += ')'
-						response += '\n'
+		response = f'Defining "{word}"\n\n'
+		for word_type, defs in definitions.items():
+			if len(defs) > 0:
+				response += f'*{word_type}*\n'
+				count = 1
+				num_defs = len(defs)
+				for d in defs:
+					response += '\t'
+					if num_defs > 1:
+						response += f'{count}. '
+						count += 1
+					response += f'{d}'
+					if '(' in d:
+						response += ')'
 					response += '\n'
-			synonyms = dictionary.synonym(word)
-			if synonyms is not None:
-				response += f'*Similar*\n\t'
-				for s in range(len(synonyms)-1):
-					response += f'{synonyms[s]}, '
-				response += f'{synonyms[-1]}'
+				response += '\n'
+		synonyms = dictionary.synonym(word)
+		if synonyms is not None:
+			response += f'*Similar*\n\t'
+			for s in range(len(synonyms)-1):
+				response += f'{synonyms[s]}, '
+			response += f'{synonyms[-1]}'
 	await ctx.send(response)
 
-@client.command()
-async def weather(ctx, *args):
+@slash.slash(name='weather',
+						 description='Display current weather for a city.',
+						 options=[
+							 create_option(
+								name='city',
+								description='Enter the city you want the weather of.',
+								option_type=3,
+								required=True
+							 )
+						 ])
+async def weather(ctx, city):
 	response = ''
-	city = '%20'.join(args)
-	url = f'https://api.openweathermap.org/data/2.5/weather?q={city}&appid={weather_key}&units=imperial'
+	city = city.replace(' ', '%20')
+	print(f'city input: {city}')
+	url = f'https://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_KEY}&units=imperial'
 	data = json.loads(requests.get(url).content)
 	if data['cod'] == 200:
 		response = f'__Weather in {data["name"]}__\n\n'
@@ -113,7 +151,6 @@ async def weather(ctx, *args):
 		response += f'**Low:** {temp_data["temp_min"]} °F\n'
 	else:
 		response = f'{data["message"]}\n'
-		response += f'Type "$help weather"'
 	await ctx.send(response)
 
-client.run(discord_key)
+client.run(DISCORD_KEY)
