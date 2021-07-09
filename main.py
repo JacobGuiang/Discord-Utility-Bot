@@ -10,8 +10,8 @@ from pprint import pprint
 client = discord.Client()
 slash = SlashCommand(client, sync_commands=True)
 
-DISCORD_KEY = 'NzQ5MTA2MTQyOTQ0Mjk3MDIw.X0nJdg.MLpArywr1Om8hYO9B-6FN8cAy-k'
-WEATHER_KEY = '50dee7e0d1221c08d5c0bf5aa2ae848d'
+DISCORD_KEY = 'discord_key'
+WEATHER_KEY = 'weather_key'
 
 DESCRIPTIONS = {
     'coinflip': 'Flip a coin a number of times.\n\n**Format:** /coinflip <number>\n\n*<number> must be greater than 0 and less than or equal to 1000000.*\n\n**Example:** /coinflip 999',
